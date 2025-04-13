@@ -1,0 +1,556 @@
+---
+title: "TP FINAL 'CURSO R' (ASET, 2024) - LUIS MATÍAS CARO"
+output:
+  pdf_document: default
+  html_document:
+    df_print: paged
+---
+
+```{r setup,include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, include=TRUE)
+
+library(tidyverse)
+library(openxlsx)
+library(eph)
+library(scales)
+library(openxlsx)
+library(dplyr)
+library(knitr)
+library(kableExtra)
+library(gt)
+library(formattable)
+library(ggplot2)
+library(tidyr)
+library(scales)
+
+variables <- c("CODUSU","NRO_HOGAR","COMPONENTE","ANO4","TRIMESTRE","AGLOMERADO","REGION",
+               "CH04","CH06","CH15","ESTADO","CAT_OCUP","CAT_INAC","PP04C99","PP07E","PP07H",
+               "NIVEL_ED","PONDERA")
+
+EPH_B <- get_microdata(year=2024, period = 3, vars = variables)
+
+EPH_B <- EPH_B %>%
+  rename(Sexo=CH04) %>% 
+  mutate(Sexo = recode(Sexo, `1` = "Hombre", `2` = "Mujer"))
+
+EPH_B <- EPH_B %>%
+  rename(nacionalidad = CH15) %>% 
+  mutate(nacionalidad = recode(nacionalidad,
+                               `1` = "Argentino",
+                               `2` = "Argentino",
+                               `3` = "Argentino",
+                               `4` = "Extranjero",
+                               `5` = "Extranjero",
+                               `9` = NA_character_))
+
+```
+
+Docentes: Facundo Lastra - Guido Weksler
+
+## **I. INTRODUCCIÓN**
+
+El presente trabajo tiene por objeto hacer un tratamiento y análisis descriptivo del fénomeno de "precariedad laboral" o "trabajo precario", como ejercicio comparativo entre la población nacional-argentina y extranjera-inmigrante, en relación a la base de datos de la "Encuesta Permanente de Hogares" (EPH), tercer trimestre año 2024, del Instituto Nacional de Estadística y Censos (INDEC), Argentina.
+
+La base de datos y el documento de libro de códigos se encuentran en el siguiente link:
+
+[INDEC, 2024 (Argentina)](https://www.indec.gob.ar/indec/web/Institucional-Indec-BasesDeDatos)
+
+La EPH contempla un instrumento y base de datos de relevamiento socioeconómico de 31 aglomerados urbanos del país. En su muestra, se registran todas las zonas regionales del país, capitales provinciales y sus aglomerados urbanos. Su aplicación es trimestral, publicandose los resultados de estimaciones en cuatro temporadas durante el año, entregandose evidencia de indicadores sociales del país referentes a pobreza, nivel educacional, mercado de trabajo y otros.
+
+## **II. DATOS DESCRIPTIVOS**
+
+## 1. Composición de la muestra, por sexo y nacionalidad.
+
+```{r}
+EPH_SEXO <- EPH_B %>% 
+  summarise(Varones = sum(PONDERA [Sexo == "Hombre"],na.rm = T),
+            Mujeres = sum(PONDERA[Sexo == "Mujer"],na.rm = T),
+            Total= sum (PONDERA, na.rm=T))
+
+EPH_SEXO <- EPH_SEXO %>%
+  mutate(across(everything(), ~ formatC(., format = "f", big.mark = ".", decimal.mark = ",", digits = 0)))
+
+kable(EPH_SEXO, caption = "TABLA 1. Población según sexo") %>% 
+  kable_styling(full_width = FALSE, position = "center", bootstrap_options = c("striped", "hover", "responsive")) %>%
+  row_spec(0, bold = TRUE, background = "white", extra_css = "text-align: center; color: black;") %>%
+  column_spec(1, bold = TRUE, color = "black",
+              background = "white", 
+              extra_css = "padding: 10px;") %>%
+  column_spec(2, bold = TRUE, color = "black",
+              background = "white", 
+              extra_css = "padding: 10px;") %>%
+  column_spec(3, bold = TRUE, color = "black",
+              background = "white", 
+              extra_css = "padding: 10px;")
+
+```
+
+```{r}
+EPH_nacionali <- EPH_B %>% 
+  summarise(Argentino = sum(PONDERA [nacionalidad == "Argentino"],na.rm = T),
+            Extranjero = sum(PONDERA[nacionalidad == "Extranjero"],na.rm = T),
+            Total= sum (PONDERA, na.rm=T))
+
+EPH_nacionali <- EPH_nacionali %>%
+  mutate(across(everything(), ~ formatC(., format = "f", big.mark = ".", decimal.mark = ",", digits = 0)))
+
+kable(EPH_nacionali, caption = "TABLA 2. Población según nacionalidad") %>% 
+  kable_styling(full_width = FALSE, position = "center", bootstrap_options = c("striped", "hover", "responsive")) %>%
+  row_spec(0, bold = TRUE, background = "white", extra_css = "text-align: center; color: black;") %>%
+  column_spec(1, bold = TRUE, color = "black",
+              background = "white", 
+              extra_css = "padding: 10px;") %>%
+  column_spec(2, bold = TRUE, color = "black",
+              background = "white", 
+              extra_css = "padding: 10px;") %>%
+  column_spec(3, bold = TRUE, color = "black",
+              background = "white", 
+              extra_css = "padding: 10px;")
+```
+
+
+## 2. Población según rango etario
+
+
+```{r}
+EPH_etario <- EPH_B %>% 
+  mutate("Rango etario"=
+           case_when(
+             CH06 < 14 ~ "Menores 0-14 años",
+             CH06 >= 15 & CH06 <= 17 ~ "Adolescente 15-17 años",
+             CH06 >= 18 & CH06 <= 29 ~ "Adulto joven 18-29 años",
+             CH06 >= 30 & CH06 <= 64 ~ "Adulto 30-64 años",
+             CH06 > 64 ~ "Adulto mayor 64+ años"))
+
+```
+
+```{r}
+  EPH_etario <- EPH_etario %>%
+  replace_na(list(`Rango etario` = "Menores 0-14 años")) 
+```
+
+
+```{r}
+tabla_rango <- EPH_etario %>% 
+  summarise (
+    "Menores 0-14 años" = sum(PONDERA[`Rango etario` %in% "Menores 0-14 años"]), 
+    "Adolescente 15-17 años" = sum(PONDERA[`Rango etario` %in% "Adolescente 15-17 años"]), 
+    "Adulto joven 18-29 años" = sum(PONDERA[`Rango etario` %in% "Adulto joven 18-29 años"]),
+    "Adulto 30-64 años" = sum(PONDERA[`Rango etario` %in% "Adulto 30-64 años"]),
+    "Adulto mayor 64+ años" = sum(PONDERA[`Rango etario` %in% "Adulto mayor 64+ años"]),
+    "Total"= sum (PONDERA))
+
+tabla_rango <- tabla_rango %>%
+  mutate(across(everything(), ~ formatC(., format = "f", big.mark = ".", decimal.mark = ",", digits = 0)))
+
+kable(tabla_rango, caption = "TABLA 3. Población según rango etario") %>% 
+  kable_styling(full_width = FALSE, position = "center", bootstrap_options = c("striped", "hover", "responsive")) %>%
+  column_spec(1, bold = TRUE, color = "black",background = "white", extra_css = "padding: 10px;text-align: center;") %>%
+  column_spec(2, bold = TRUE, color = "black",background = "white", extra_css = "padding: 10px;text-align: center;") %>%
+  column_spec(3, bold = TRUE, color = "black",background = "white", extra_css = "padding: 10px;text-align: center;") %>%
+  column_spec(4, bold = TRUE, color = "black",background = "white", extra_css = "padding: 10px;text-align: center;") %>%
+  column_spec(5, bold = TRUE, color = "black",background = "white", extra_css = "padding: 10px;text-align: center;")
+
+```
+
+## 3. Población según nivel educativo
+
+```{r, echo=FALSE, warning=FALSE}
+EPH_educa <- EPH_B %>%
+    mutate(
+    "Nivel Educativo" = factor(
+      case_when(NIVEL_ED %in% c(7,1,2,3) ~ "Secundario incompleto o menos",
+                NIVEL_ED %in% c(4,5) ~ "Secundario Completo",
+                NIVEL_ED == 6 ~ "Superior Completo",
+                TRUE ~ "Ns/Nr"),
+      levels = c("Secundario incompleto o menos","Secundario Completo","Superior Completo"))
+    )
+```
+
+```{r}
+tabla_educa <- EPH_educa %>% 
+  summarise(
+    "Secundario incompleto o menos" = sum(PONDERA[`Nivel Educativo` == "Secundario incompleto o menos"], na.rm = TRUE),
+    "Secundario Completo" = sum(PONDERA[`Nivel Educativo` == "Secundario Completo"], na.rm = TRUE),
+    "Superior Completo" = sum(PONDERA[`Nivel Educativo` == "Superior Completo"], na.rm = TRUE),
+    "Total" = sum(PONDERA, na.rm = TRUE),
+    .groups = 'drop'
+  )
+
+tabla_educa <- tabla_educa %>%
+  mutate(across(everything(), ~ formatC(., format = "f", big.mark = ".", decimal.mark = ",", digits = 0)))
+
+kable(tabla_educa, caption = "TABLA 4.Población según nivel educativo") %>% 
+kable_styling(full_width = FALSE, position = "center", bootstrap_options = c("striped", "hover", "responsive")) %>%
+  row_spec(0,extra_css = "padding: 10px;text-align: center;") %>% 
+  column_spec(1, bold = TRUE, color = "black",
+              background = "white", 
+              extra_css = "padding: 10px;text-align: center;") %>%
+  column_spec(2, bold = TRUE, color = "black",
+              background = "white", 
+              extra_css = "padding: 10px;text-align: center;") %>%
+  column_spec(3, bold = TRUE, color = "black",
+              background = "white", 
+              extra_css = "padding: 10px;text-align: center;") %>% 
+   column_spec(4, bold = TRUE, color = "black",
+              background = "white", 
+              extra_css = "padding: 10px;text-align: center;")
+```
+
+## 4. Descriptivos de precariedad laboral
+
+En la presente propuesta, la "precariedad laboral" se comprende en el marco de la "población ocupada" (ESTADO = 1). Según la literatura, se consideran "trabajadores precarios" bajo condiciones laborales endebles sin descuento jubilatorio, con caracteristicas de no-registración (informalidad), de inestabilidad (empleos de tiempo determinado, plan de empleo, pasantía, periodo de prueba), trabajadores familiares sin remuneración, y asalariados del sector formal e informal de manera indistinta del tamaño de establecimiento (empresa).
+
+```{r}
+precari <- EPH_B %>%
+  filter(ESTADO == 1) %>%  
+  mutate(
+    dummy_precariedad = ifelse(
+      (CAT_OCUP == 3 & PP07H == 2) | 
+      (CAT_OCUP == 3 & PP07E %in% c(1, 2, 3)) | 
+      (CAT_OCUP == 4) | 
+      (CAT_OCUP == 3 & PP04C99 %in% c(1, 2, 3)),
+      1, 0)
+  ) %>%
+  summarise( 
+    "Trabajadores precarios" = sum(PONDERA[dummy_precariedad == 1], na.rm = TRUE),
+    "Trabajadores no-precarios" = sum(PONDERA[dummy_precariedad == 0], na.rm = TRUE),
+    "Población ocupada" = sum(PONDERA, na.rm = TRUE)
+  )
+
+tabla_precari <- precari %>%
+  mutate(across(everything(), ~ formatC(., format = "f", big.mark = ".", decimal.mark = ",", digits = 0)))
+
+kable(tabla_precari, caption = "TABLA 5. Cantidad de trabajadores ocupados en condición de precariedad") %>% 
+  kable_styling(full_width = FALSE, position = "center", bootstrap_options = c("striped", "hover", "responsive")) %>%
+  row_spec(0, extra_css = "padding: 10px;text-align: center;") %>% 
+  column_spec(1, bold = TRUE, color = "black", background = "white", extra_css = "padding: 10px;text-align: center;") %>%
+  column_spec(2, bold = TRUE, color = "black", background = "white", extra_css = "padding: 10px;text-align: center;") %>%
+  column_spec(3, bold = TRUE, color = "black", background = "white", extra_css = "padding: 10px;text-align: center;")
+```
+
+```{r, include=FALSE}
+porcen_precari <- precari %>%
+  summarise( 
+    `% Trabajadores precarios` = (`Trabajadores precarios` / `Población ocupada`) * 100,
+    `% Trabajadores no-precarios` = (`Trabajadores no-precarios` / `Población ocupada`) * 100)
+```
+
+
+```{r}
+porcen_precari <- data.frame(
+  Categoria = c("% trabajadores precarios", "% trabajadores no-precarios"),
+  Porcentaje = c(34, 65))
+
+colores <- c("% trabajadores precarios" = "yellow", "% trabajadores no-precarios" = "lightblue")
+
+ggplot(porcen_precari, aes(x = "", y = Porcentaje, fill = Categoria)) +
+  geom_bar(stat = "identity", width = 1) +
+  coord_polar("y") +
+  labs(title = "GRÁFICO 1. Porcentaje de trabajadores ocupados según condición precaria", 
+       x = "", 
+       y = "") +
+  theme_minimal() +
+  theme(legend.title = element_blank()) +
+  geom_text(aes(label = sprintf("%.1f%%", Porcentaje)), 
+            position = position_stack(vjust = 0.5)) +
+  scale_fill_manual(values = colores)
+```
+
+
+## 4. a) Precariedad según sexo
+
+```{r}
+precari_sexo <- EPH_B %>%
+  filter(ESTADO == 1) %>%  
+  mutate(
+    dummy_precariedad = ifelse(
+      (CAT_OCUP == 3 & PP07H == 2) | 
+      (CAT_OCUP == 3 & PP07E %in% c(1, 2, 3)) | 
+      (CAT_OCUP == 4) | 
+      (CAT_OCUP == 3 & PP04C99 %in% c(1, 2, 3)),
+      1, 0)) %>%
+  group_by(Sexo) %>%
+  summarise( 
+    "Trabajadores precarios" = sum(PONDERA[dummy_precariedad == 1], na.rm = TRUE),
+    "Trabajadores no-precarios" = sum(PONDERA[dummy_precariedad == 0], na.rm = TRUE),
+    "Población ocupada" = sum(PONDERA, na.rm = TRUE)) %>%
+  ungroup() 
+
+tabla_precari_sexo <- precari_sexo %>%
+  mutate(across(everything(), ~ formatC(., format = "f", big.mark = ".", decimal.mark = ",", digits = 0)))
+
+kable(tabla_precari_sexo, caption = "TABLA 6. Cantidad de trabajadores ocupados según condición precaria, por sexo", align = 'c') %>% 
+  kable_styling(full_width = FALSE, position = "center",
+  bootstrap_options = c("striped", "hover", "responsive")) %>%
+  column_spec(1, bold = TRUE, color = "black", background = "white", extra_css = "padding: 10px;text-align: left;") %>%
+  column_spec(2, bold = TRUE, color = "black", background = "white", extra_css = "padding: 10px; text-align: center;") %>%
+  column_spec(3, bold = TRUE, color = "black", background = "white", extra_css = "padding: 10px; text-align: center;") %>%
+  column_spec(4, bold = TRUE, color = "black", background = "white", extra_css = "padding: 10px; text-align: center;")
+```
+
+```{r, include=FALSE}
+porcen_sexo <- precari_sexo %>%
+  group_by(Sexo) %>% 
+  summarise( 
+    `% trabajadores precarios` = (`Trabajadores precarios` / `Población ocupada`) * 100,
+    `% trabajadores no-precarios` = (`Trabajadores no-precarios` / `Población ocupada`) * 100)
+print(porcen_sexo)
+```
+
+
+```{r}
+grafico_precariedad_sexo <- porcen_sexo %>%
+  pivot_longer(cols = c(`% trabajadores precarios`, `% trabajadores no-precarios`), 
+               names_to = "Situación", 
+               values_to = "Porcentaje")
+
+
+ggplot(grafico_precariedad_sexo, aes(x = Sexo, y = Porcentaje, fill = Situación)) +
+  geom_bar(stat = "identity") +
+  geom_text(aes(label = paste0(round(Porcentaje, 1), "%")),
+            position = position_stack(vjust = 0.5),  
+            color = "black") +  
+  labs(title = "GRAFICO 2. Porcentaje de Trabajadores según condición de precariedad, por sexo",
+       x = "Sexo", 
+       y = "Porcentaje",
+       fill = "Situación") +
+  theme_minimal() +
+  scale_y_continuous(labels = scales::percent_format(scale = 1)) + 
+  scale_fill_manual(values = c("% trabajadores precarios" = "yellow", 
+                                "% trabajadores no-precarios" = "lightblue"))
+```
+
+## 4. b) Precariedad según nacionalidad
+
+```{r}
+precari_naci <- EPH_B %>%
+  filter(ESTADO == 1, !is.na(nacionalidad)) %>%  
+  mutate(
+    dummy_precariedad = ifelse(
+      (CAT_OCUP == 3 & PP07H == 2) | 
+      (CAT_OCUP == 3 & PP07E %in% c(1, 2, 3)) | 
+      (CAT_OCUP == 4) | 
+      (CAT_OCUP == 3 & PP04C99 %in% c(1, 2, 3)),
+      1, 0)) %>%
+  group_by(nacionalidad) %>%
+  summarise( 
+    "Trabajadores precarios" = sum(PONDERA[dummy_precariedad == 1], na.rm = TRUE),
+    "Trabajadores no-precarios" = sum(PONDERA[dummy_precariedad == 0], na.rm = TRUE),
+    "Población ocupada" = sum(PONDERA, na.rm = TRUE)) %>%
+  ungroup() 
+
+tabla_precari_naci <- precari_naci %>%
+  mutate(across(everything(), ~ formatC(., format = "f", big.mark = ".", decimal.mark = ",", digits = 0)))
+
+kable(tabla_precari_naci, caption = "TABLA 7. Cantidad de trabajadores ocupados según condición precaria, por nacionalidad", align = 'c') %>% 
+  kable_styling(full_width = FALSE, position = "center",
+  bootstrap_options = c("striped", "hover", "responsive")) %>%
+  column_spec(1, bold = TRUE, color = "black", background = "white", extra_css = "padding: 10px;text-align: left;") %>%
+  column_spec(2, bold = TRUE, color = "black", background = "white", extra_css = "padding: 10px; text-align: center;") %>%
+  column_spec(3, bold = TRUE, color = "black", background = "white", extra_css = "padding: 10px; text-align: center;") %>%
+  column_spec(4, bold = TRUE, color = "black", background = "white", extra_css = "padding: 10px; text-align: center;")
+```
+
+```{r, include=FALSE}
+porcen_naci <- precari_naci %>%
+  group_by(nacionalidad) %>% 
+  summarise( 
+    `% trabajadores precarios` = (`Trabajadores precarios` / `Población ocupada`) * 100,
+    `% trabajadores no-precarios` = (`Trabajadores no-precarios` / `Población ocupada`) * 100)
+print(porcen_naci)
+```
+
+
+```{r}
+grafico_precariedad_naci <- porcen_naci %>%
+  pivot_longer(cols = c(`% trabajadores precarios`, `% trabajadores no-precarios`), 
+               names_to = "Situación", 
+               values_to = "Porcentaje")
+
+
+ggplot(grafico_precariedad_naci, aes(x = nacionalidad, y = Porcentaje, fill = Situación)) +
+  geom_bar(stat = "identity") +
+  geom_text(aes(label = paste0(round(Porcentaje, 1), "%")),
+            position = position_stack(vjust = 0.5),  
+            color = "black") +  
+  labs(title = "GRAFICO 3. Porcentaje de trabajadores según condición precaria, por nacionalidad",
+       x = "nacionalidad", 
+       y = "Porcentaje",
+       fill = "Situación") +
+  theme_minimal() +
+  scale_y_continuous(labels = scales::percent_format(scale = 1)) + 
+  scale_fill_manual(values = c("% trabajadores precarios" = "yellow", 
+                                "% trabajadores no-precarios" = "lightblue"))
+```
+
+## 4. c) Precariedad según rango etario
+
+```{r}
+precari_etario <- EPH_etario %>%
+  filter(ESTADO == 1) %>%  
+  mutate(
+    dummy_precariedad = ifelse(
+      (CAT_OCUP == 3 & PP07H == 2) | 
+      (CAT_OCUP == 3 & PP07E %in% c(1, 2, 3)) | 
+      (CAT_OCUP == 4) | 
+      (CAT_OCUP == 3 & PP04C99 %in% c(1, 2, 3)),
+      1, 0)
+  ) %>%
+  group_by(`Rango etario`) %>%
+  summarise( 
+    "Trabajadores precarios" = sum(PONDERA[dummy_precariedad == 1], na.rm = TRUE),
+    "Trabajadores no-precarios" = sum(PONDERA[dummy_precariedad == 0], na.rm = TRUE),
+    "Población ocupada" = sum(PONDERA, na.rm = TRUE)
+  ) %>%
+  ungroup() 
+
+orden_rango <- c("Menores 0-14 años", "Adolescente 15-17 años","Adulto joven 18-29 años","Adulto 30-64 años", "Adulto mayor 64+ años")  
+
+# Modificar el orden de las franjas etarias y formatear
+tabla_etario <- precari_etario %>%
+  mutate(`Rango etario` = factor(`Rango etario`, levels = orden_rango))%>%
+  arrange(`Rango etario`) %>% # <-- Ordena explícitamente por el factor
+  mutate(
+    "Trabajadores precarios" = formatC(`Trabajadores precarios`, format = "f", big.mark = ".", decimal.mark = ",", digits = 0),
+    "Trabajadores no-precarios" = formatC(`Trabajadores no-precarios`, format = "f", big.mark = ".", decimal.mark = ",", digits = 0),
+    "Población ocupada" = formatC(`Población ocupada`, format = "f", big.mark = ".", decimal.mark = ",", digits = 0)
+  )
+  
+kable(tabla_etario, caption = "TABLA 8. Cantidad de trabajadores ocupados según condición precaria, por rango etario", align = 'c') %>% 
+  kable_styling(full_width = FALSE, position = "center",
+  bootstrap_options = c("striped", "hover", "responsive")) %>%
+  column_spec(1, bold = TRUE, color = "black", background = "white", extra_css = "padding: 10px;text-align: left;") %>%
+  column_spec(2, bold = TRUE, color = "black", background = "white", extra_css = "padding: 10px; text-align: center;") %>%
+  column_spec(3, bold = TRUE, color = "black", background = "white", extra_css = "padding: 10px; text-align: center;") %>%
+  column_spec(4, bold = TRUE, color = "black", background = "white", extra_css = "padding: 10px; text-align: center;")
+```
+
+<br>
+
+```{r, include=FALSE}
+porcen_etario <- precari_etario %>%
+  group_by(`Rango etario`) %>% 
+  summarise( 
+    `% Trabajadores precarios` = (`Trabajadores precarios` / `Población ocupada`) * 100,
+    `% Trabajadores no-precarios` = (`Trabajadores no-precarios` / `Población ocupada`) * 100
+  )
+```
+
+```{r}
+graf_precari_etari <- porcen_etario %>%
+  pivot_longer(cols = c(`% Trabajadores precarios`, `% Trabajadores no-precarios`), 
+               names_to = "Situación", 
+               values_to = "Porcentaje") %>%
+  mutate(`Franja Etaria` = factor(`Rango etario`, levels = orden_rango))
+
+graf_precari_etari <- porcen_etario %>%
+  pivot_longer(cols = c(`% Trabajadores precarios`, `% Trabajadores no-precarios`), 
+               names_to = "Situación", 
+               values_to = "Porcentaje") %>%
+  mutate(`Franja Etaria` = factor(`Rango etario`, levels = orden_rango))
+
+ggplot(graf_precari_etari, aes(x = `Rango etario`, y = Porcentaje, fill = Situación)) +
+  geom_bar(stat = "identity", position = "stack", width = 0.7) +
+  geom_text(aes(label = paste0(round(Porcentaje, 1), "%")),  # Ajustar el porcentaje
+            position = position_stack(vjust = 0.5),  # Centrar etiquetas
+            color = "black", size = 4) +  # Ajusta el tamaño de la fuente de las etiquetas
+  labs(title = "GRAFICO 4. Porcentaje de trabajadores según condición de precariedad, por rango etario",
+       x = "Franja Etaria", 
+       y = "Porcentaje",
+       fill = "Situación") +
+  theme_minimal(base_size = 10) +  # Aumentar el tamaño base del texto
+  theme(legend.title = element_blank(),
+        axis.text.x = element_text(angle = 45, hjust = 1, vjust = 1, margin = margin(t = 10))) +  # Ajustar vjust para las etiquetas
+  scale_y_continuous(labels = scales::percent_format(scale = 1)) + 
+  scale_fill_manual(values = c("% Trabajadores precarios" = "yellow", 
+                                "% Trabajadores no-precarios" = "lightblue"))
+```
+
+
+## 4. d) Precariedad según nivel educacional
+
+```{r}
+precari_educa <- EPH_educa %>%
+  filter(ESTADO == 1) %>%  
+  mutate(
+    dummy_precariedad = ifelse(
+      (CAT_OCUP == 3 & PP07H == 2) | 
+      (CAT_OCUP == 3 & PP07E %in% c(1, 2, 3)) | 
+      (CAT_OCUP == 4) | 
+      (CAT_OCUP == 3 & PP04C99 %in% c(1, 2, 3)),
+      1, 0)
+  ) %>%
+  group_by(`Nivel Educativo`) %>%
+  summarise( 
+    "Trabajadores precarios" = sum(PONDERA[dummy_precariedad == 1], na.rm = TRUE),
+    "Trabajadores no-precarios" = sum(PONDERA[dummy_precariedad == 0], na.rm = TRUE),
+    "Población ocupada" = sum(PONDERA, na.rm = TRUE)
+  ) %>%
+  ungroup() 
+
+orden_nivel <- c("Secundario incompleto o menos","Secundaria Completa","Superior Completo")  
+
+
+```
+
+<br>
+
+```{r}
+# Modificar el orden de las franjas etarias
+tabla_precari_educa <- precari_educa %>%
+  mutate(`Nivel Educativo` = factor(`Nivel Educativo`, levels = orden_nivel))
+
+# Crear una tabla de presentación con valores formateados
+tabla_precari_educa <- precari_educa %>%
+  mutate(
+    "Trabajadores precarios" = formatC(`Trabajadores precarios`, format = "f", big.mark = ".", decimal.mark = ",", digits = 0),
+    "Trabajadores no-precarios" = formatC(`Trabajadores no-precarios`, format = "f", big.mark = ".", decimal.mark = ",", digits = 0),
+    "Población ocupada" = formatC(`Población ocupada`, format = "f", big.mark = ".", decimal.mark = ",", digits = 0)
+  )
+
+# Mostrar la tabla con el nuevo orden
+kable(tabla_precari_educa, caption = "TABLA 8. Cantidad de trabajadores ocupados según condición de precariedad, por nivel educacional", align = 'c') %>% 
+  kable_styling(full_width = FALSE, position = "center",
+  bootstrap_options = c("striped", "hover", "responsive")) %>%
+  column_spec(1, bold = TRUE, color = "black", background = "white", extra_css = "padding: 10px;text-align: left;") %>%
+  column_spec(2, bold = TRUE, color = "black", background = "white", extra_css = "padding: 10px; text-align: center;") %>%
+  column_spec(3, bold = TRUE, color = "black", background = "white", extra_css = "padding: 10px; text-align: center;") %>%
+  column_spec(4, bold = TRUE, color = "black", background = "white", extra_css = "padding: 10px; text-align: center;")
+```
+
+<br>
+
+```{r, include=FALSE}
+porcen_educa <- precari_educa %>%
+  group_by(`Nivel Educativo`) %>% 
+  summarise( 
+    `% Trabajadores precarios` = (`Trabajadores precarios` / `Población ocupada`) * 100,
+    `% Trabajadores no-precarios` = (`Trabajadores no-precarios` / `Población ocupada`) * 100
+  )
+```
+
+```{r}
+graf_precari_educa <- porcen_educa %>%
+  pivot_longer(cols = c(`% Trabajadores precarios`, `% Trabajadores no-precarios`), 
+               names_to = "Situación", 
+               values_to = "Porcentaje")
+
+
+ggplot(graf_precari_educa, aes(x = `Nivel Educativo`, y = Porcentaje, fill = Situación)) +
+  geom_bar(stat = "identity", position = "stack", width = 0.7) +
+  geom_text(aes(label = paste0(round(Porcentaje, 1), "%")),
+            position = position_stack(vjust = 0.5),  
+            color = "black") +  
+  labs(title = "GRAFICO 5. Porcentaje de trabajadores según condición de precariedad, por nivel educacional",
+       x = "Nivel Educativo", 
+       y = "Porcentaje",
+       fill = "Situación") +
+  theme_minimal(base_size = 10) +  # Aumentar el tamaño base del texto
+  theme(legend.title = element_blank(),
+        axis.text.x = element_text(angle = 45, hjust = 1, vjust = 1, margin = margin(t = 10))) +  # Ajustar vjust para las etiquetas
+  scale_y_continuous(labels = scales::percent_format(scale = 1)) + 
+  scale_fill_manual(values = c("% Trabajadores precarios" = "yellow", 
+                                "% Trabajadores no-precarios" = "lightblue"))+
+theme(axis.text.x = element_text(margin = margin(b = 10)))
+```
